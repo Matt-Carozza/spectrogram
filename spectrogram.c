@@ -10,19 +10,20 @@
 
 /*
 TODO:
-- Segmentation 
-- Windowing Signal
+- Apply window function
+- Overlapping signals 
 */
 
 #define SAMPLE_RATE 44100 
-#define BUFFER_SIZE 4096
-#define HALF_BUFFER_SIZE (BUFFER_SIZE / 2)
+#define FRAME_SIZE 4096
+#define HALF_FRAME_SIZE (FRAME_SIZE / 2)
+#define HOP_LENGTH 441
 #define PI 3.14159265358979323846f
 
 typedef struct {
-    size_t amplitude_size;
+    size_t magnitude_size;
     size_t sample_size;
-    double* amplitude;
+    double* magnitude;
     double* frequency;
 } FreqDomain;
 
@@ -32,7 +33,7 @@ typedef struct {
 void fd_create(FreqDomain* fd, Wave* wave);
 void fd_destroy(FreqDomain* fd);
 void fd_set_frequency(FreqDomain* fd);
-void fd_set_amplitude(FreqDomain* fd, Wave* wave);
+void fd_set_magnitude(FreqDomain* fd, Wave* wave);
 void fd_write_buffer_to_file(FreqDomain* fd, size_t sample_index);
 void fft(short in[], double complex out[], size_t n);
 void _fft(short in[], double complex out[], size_t n, size_t stride);
@@ -46,7 +47,7 @@ int main(void) {
 
     fd_create(&fd, &wave_copy);
 
-    fd_set_amplitude(&fd, &wave_copy);
+    fd_set_magnitude(&fd, &wave_copy);
     fd_set_frequency(&fd);
     fd_write_buffer_to_file(&fd, fd.sample_size / 2);
 
@@ -58,56 +59,54 @@ int main(void) {
 
 
 void fd_create(FreqDomain* fd, Wave* wave) {
-    fd->amplitude_size = 0;
+    fd->magnitude_size = 0;
     fd->sample_size = 0;
-    fd->amplitude = malloc((wave->frameCount + HALF_BUFFER_SIZE) * sizeof(fd->amplitude));
-    fd->frequency = malloc(HALF_BUFFER_SIZE * sizeof(fd->frequency));
+    fd->magnitude = malloc((wave->frameCount + HALF_FRAME_SIZE) * sizeof(fd->magnitude));
+    fd->frequency = malloc(HALF_FRAME_SIZE * sizeof(fd->frequency));
 }
 
 void fd_destroy(FreqDomain* fd) {
-    free(fd->amplitude);
-    fd->amplitude = NULL;
+    free(fd->magnitude);
+    fd->magnitude = NULL;
     free(fd->frequency);
     fd->frequency = NULL;
 }
 
 void fd_set_frequency(FreqDomain* fd) {
-    for(size_t i = 0; i < HALF_BUFFER_SIZE; i++) {
-        fd->frequency[i] = ((double)i / HALF_BUFFER_SIZE) * SAMPLE_RATE;
+    for(size_t i = 0; i < HALF_FRAME_SIZE; i++) {
+        fd->frequency[i] = ((double)i / HALF_FRAME_SIZE) * SAMPLE_RATE;
     }
 }
 
-void fd_set_amplitude(FreqDomain* fd, Wave* wave) {
-    short PCM_buffer[BUFFER_SIZE];
-    double complex fft_output[BUFFER_SIZE];
+void fd_set_magnitude(FreqDomain* fd, Wave* wave) {
+    short PCM_buffer[FRAME_SIZE];
+    double complex fft_output[FRAME_SIZE];
     size_t wave_iterator = 0;
     short* wave_data_ptr = wave->data;
-    double debug_amplitude[HALF_BUFFER_SIZE];
     
-    for(wave_iterator = 0; wave_iterator < wave->frameCount - BUFFER_SIZE;) {
-        for(size_t j = 0; j < BUFFER_SIZE; ++j) {
+    for(wave_iterator = 0; wave_iterator < wave->frameCount - FRAME_SIZE;) {
+        for(size_t j = 0; j < FRAME_SIZE; ++j) {
             PCM_buffer[j] = wave_data_ptr[wave_iterator++];
         }
-        fft(PCM_buffer, fft_output, BUFFER_SIZE);
-        for(size_t j = 0; j < HALF_BUFFER_SIZE; ++j) {
-            fd->amplitude[fd->amplitude_size++] = cabs(fft_output[j]);
-            debug_amplitude[j] = cabs(fft_output[j]);
+        fft(PCM_buffer, fft_output, FRAME_SIZE);
+        for(size_t j = 0; j < HALF_FRAME_SIZE; ++j) {
+            fd->magnitude[fd->magnitude_size++] = cabs(fft_output[j]);
         }
         fd->sample_size++;
     }
     
     // Final buffer will exceed frame count size, so zeros must be put into after
-    for(size_t i = 0; i < BUFFER_SIZE; ++i) {
-        if (i < wave->frameCount % BUFFER_SIZE) {
+    for(size_t i = 0; i < FRAME_SIZE; ++i) {
+        if (i < wave->frameCount % FRAME_SIZE) {
             PCM_buffer[i] = wave_data_ptr[wave_iterator++];
         } 
         else  {
             PCM_buffer[i] = 0;
         }
     }
-    fft(PCM_buffer, fft_output, BUFFER_SIZE);
-    for(size_t i = HALF_BUFFER_SIZE - 1; i < BUFFER_SIZE; ++i) {
-        fd->amplitude[fd->amplitude_size++] = cabs(fft_output[i]);
+    fft(PCM_buffer, fft_output, FRAME_SIZE);
+    for(size_t i = HALF_FRAME_SIZE - 1; i < FRAME_SIZE; ++i) {
+        fd->magnitude[fd->magnitude_size++] = cabs(fft_output[i]);
     }
     fd->sample_size++; // Increase sample by one for final buffer
     fd += 0;
@@ -116,8 +115,6 @@ void fd_set_amplitude(FreqDomain* fd, Wave* wave) {
 void fd_write_buffer_to_file(FreqDomain* fd, size_t sample_index) {
     FILE *file;
     
-    struct stat st = {0};
-    
     file = fopen("debug/sample.txt", "w");
     
     if (file ==  NULL) {
@@ -125,12 +122,12 @@ void fd_write_buffer_to_file(FreqDomain* fd, size_t sample_index) {
        return;
     }
     
-    for (size_t i = 0; i < HALF_BUFFER_SIZE; ++i) {
-        fprintf(file, "%zu: (%lfHz, %lf)\n", i, fd->frequency[i], fd->amplitude[(sample_index * HALF_BUFFER_SIZE) + i]);
+    for (size_t i = 0; i < HALF_FRAME_SIZE; ++i) {
+        fprintf(file, "%zu: (%lfHz, %lf)\n", i, fd->frequency[i], fd->magnitude[(sample_index * HALF_FRAME_SIZE) + i]);
     }
 
-    // for (size_t i = 0; i < HALF_BUFFER_SIZE; ++i) {
-    //     fprintf(file, "(%zu, %lfHz): (%lf, %lf)\n", i, fd->frequency[HALF_BUFFER_SIZE - i - 1], fd->amplitude[(HALF_BUFFER_SIZE * sample_index) + i], fd->amplitude[(HALF_BUFFER_SIZE * (sample_index + 1)) - i]);
+    // for (size_t i = 0; i < HALF_FRAME_SIZE; ++i) {
+    //     fprintf(file, "(%zu, %lfHz): (%lf, %lf)\n", i, fd->frequency[HALF_FRAME_SIZE - i - 1], fd->magnitude[(HALF_FRAME_SIZE * sample_index) + i], fd->magnitude[(HALF_FRAME_SIZE * (sample_index + 1)) - i]);
     // }
     
     fclose(file);
@@ -139,7 +136,7 @@ void fd_write_buffer_to_file(FreqDomain* fd, size_t sample_index) {
 
 void fft(short in[], double complex out[], size_t n) {
     assert(n % 2 == 0);
-    _fft(in, out, BUFFER_SIZE, 1);
+    _fft(in, out, FRAME_SIZE, 1);
 }
 
 void _fft(short in[], double complex out[], size_t n, size_t stride) {

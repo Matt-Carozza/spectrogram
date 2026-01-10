@@ -69,9 +69,9 @@ void FreqDomain_create(FreqDomain* fd, Wave* wave) {
     fd->sample_size = 0;
     fd->magnitude.length = 0;
     fd->magnitude.capacity = wave->frameCount + HALF_FRAME_SIZE;
-    fd->magnitude.items = malloc(fd->magnitude.capacity * sizeof(fd->magnitude.items));
+    fd->magnitude.items = malloc(fd->magnitude.capacity * sizeof(*fd->magnitude.items));
     fd->frequency.capacity = HALF_FRAME_SIZE;
-    fd->frequency.items = malloc(fd->frequency.capacity * sizeof(fd->frequency.items));
+    fd->frequency.items = malloc(fd->frequency.capacity * sizeof(*fd->frequency.items));
 }
 
 void FreqDomain_destroy(FreqDomain* fd) {

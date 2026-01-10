@@ -10,6 +10,7 @@
 
 /*
 TODO:
+- Change arrays into Nic Barkers array form
 - Apply window function
 - Overlapping signals 
 */
@@ -21,14 +22,21 @@ TODO:
 #define PI 3.14159265358979323846f
 
 typedef struct {
-    size_t magnitude_size;
+    double* items; 
+    size_t length;
+    size_t capacity;
+} DoubleArray;
+
+
+typedef struct {
     size_t sample_size;
-    double* magnitude;
-    double* frequency;
+    DoubleArray magnitude;
+    DoubleArray frequency;
 } FreqDomain;
 
 // MEL DATA STRUCT
 
+double DoubleArray_get(DoubleArray array, size_t index);
 
 void fd_create(FreqDomain* fd, Wave* wave);
 void fd_destroy(FreqDomain* fd);
@@ -59,22 +67,25 @@ int main(void) {
 
 
 void fd_create(FreqDomain* fd, Wave* wave) {
-    fd->magnitude_size = 0;
     fd->sample_size = 0;
-    fd->magnitude = malloc((wave->frameCount + HALF_FRAME_SIZE) * sizeof(fd->magnitude));
-    fd->frequency = malloc(HALF_FRAME_SIZE * sizeof(fd->frequency));
+    fd->magnitude.length = 0;
+    fd->magnitude.capacity = wave->frameCount + HALF_FRAME_SIZE;
+    fd->magnitude.items = malloc(fd->magnitude.capacity * sizeof(fd->magnitude.items));
+    fd->frequency.capacity = HALF_FRAME_SIZE;
+    fd->frequency.items = malloc(fd->frequency.capacity * sizeof(fd->frequency.items));
 }
 
 void fd_destroy(FreqDomain* fd) {
-    free(fd->magnitude);
-    fd->magnitude = NULL;
-    free(fd->frequency);
-    fd->frequency = NULL;
+    free(fd->magnitude.items);
+    fd->magnitude.items = NULL;
+    free(fd->frequency.items);
+    fd->frequency.items = NULL;
 }
 
 void fd_set_frequency(FreqDomain* fd) {
-    for(size_t i = 0; i < HALF_FRAME_SIZE; i++) {
-        fd->frequency[i] = ((double)i / HALF_FRAME_SIZE) * SAMPLE_RATE;
+    for(size_t i = 0; i < HALF_FRAME_SIZE; ++i) {
+        fd->frequency.items[i] = i * ((double)SAMPLE_RATE / FRAME_SIZE);
+        fd->frequency.length++;
     }
 }
 
@@ -89,8 +100,8 @@ void fd_set_magnitude(FreqDomain* fd, Wave* wave) {
             PCM_buffer[j] = wave_data_ptr[wave_iterator++];
         }
         fft(PCM_buffer, fft_output, FRAME_SIZE);
-        for(size_t j = 0; j < HALF_FRAME_SIZE; ++j) {
-            fd->magnitude[fd->magnitude_size++] = cabs(fft_output[j]);
+        for(size_t j = HALF_FRAME_SIZE - 1; j < FRAME_SIZE; ++j) {
+            fd->magnitude.items[fd->magnitude.length++] = cabs(fft_output[j]);
         }
         fd->sample_size++;
     }
@@ -106,7 +117,7 @@ void fd_set_magnitude(FreqDomain* fd, Wave* wave) {
     }
     fft(PCM_buffer, fft_output, FRAME_SIZE);
     for(size_t i = HALF_FRAME_SIZE - 1; i < FRAME_SIZE; ++i) {
-        fd->magnitude[fd->magnitude_size++] = cabs(fft_output[i]);
+        fd->magnitude.items[fd->magnitude.length++] = cabs(fft_output[i]);
     }
     fd->sample_size++; // Increase sample by one for final buffer
     fd += 0;
@@ -123,7 +134,7 @@ void fd_write_buffer_to_file(FreqDomain* fd, size_t sample_index) {
     }
     
     for (size_t i = 0; i < HALF_FRAME_SIZE; ++i) {
-        fprintf(file, "%zu: (%lfHz, %lf)\n", i, fd->frequency[i], fd->magnitude[(sample_index * HALF_FRAME_SIZE) + i]);
+        fprintf(file, "%zu: (%lfHz, %lf)\n", i, DoubleArray_get(fd->frequency, i), DoubleArray_get(fd->magnitude, (sample_index * HALF_FRAME_SIZE) + i));
     }
 
     // for (size_t i = 0; i < HALF_FRAME_SIZE; ++i) {
@@ -156,4 +167,11 @@ void _fft(short in[], double complex out[], size_t n, size_t stride) {
         out[i] = e + v; 
         out[i + (n/2)] = e - v; 
     } 
+}
+
+double DoubleArray_get(DoubleArray array, size_t index) {
+    if (index < array.length) {
+        return array.items[index];
+    }
+    return 0;
 }

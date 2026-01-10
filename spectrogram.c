@@ -10,6 +10,7 @@
 
 /*
 TODO:
+- Normalize Data
 - Apply window function
 - Overlapping signals 
 */
@@ -36,6 +37,7 @@ typedef struct {
 // MEL DATA STRUCT
 
 double DoubleArray_get(DoubleArray array, size_t index);
+void DoubleArray_push(DoubleArray* array, double value);
 
 void FreqDomain_create(FreqDomain* fd, Wave* wave);
 void FreqDomain_destroy(FreqDomain* fd);
@@ -83,8 +85,7 @@ void FreqDomain_destroy(FreqDomain* fd) {
 
 void FreqDomain_frequency_set(FreqDomain* fd) {
     for(size_t i = 0; i < HALF_FRAME_SIZE; ++i) {
-        fd->frequency.items[i] = i * ((double)SAMPLE_RATE / FRAME_SIZE);
-        fd->frequency.length++;
+        DoubleArray_push(&fd->frequency, i * ((double)SAMPLE_RATE / FRAME_SIZE));
     }
 }
 
@@ -100,7 +101,7 @@ void FreqDomain_set_magnitude(FreqDomain* fd, Wave* wave) {
         }
         fft(PCM_buffer, fft_output, FRAME_SIZE);
         for(size_t j = HALF_FRAME_SIZE - 1; j < FRAME_SIZE; ++j) {
-            fd->magnitude.items[fd->magnitude.length++] = cabs(fft_output[j]);
+            DoubleArray_push(&fd->magnitude, cabs(fft_output[j]));
         }
         fd->sample_size++;
     }
@@ -116,7 +117,7 @@ void FreqDomain_set_magnitude(FreqDomain* fd, Wave* wave) {
     }
     fft(PCM_buffer, fft_output, FRAME_SIZE);
     for(size_t i = HALF_FRAME_SIZE - 1; i < FRAME_SIZE; ++i) {
-        fd->magnitude.items[fd->magnitude.length++] = cabs(fft_output[i]);
+        DoubleArray_push(&fd->magnitude, cabs(fft_output[i]));
     }
     fd->sample_size++; // Increase sample by one for final buffer
     fd += 0;
@@ -173,4 +174,12 @@ double DoubleArray_get(DoubleArray array, size_t index) {
         return array.items[index];
     }
     return 0;
+}
+
+void DoubleArray_push(DoubleArray* array, double value) {
+    if (array->length < array->capacity) {
+        array->items[array->length++] = value;
+        return;
+    }
+    return;
 }

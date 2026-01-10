@@ -10,7 +10,6 @@
 
 /*
 TODO:
-- Change arrays into Nic Barkers array form
 - Apply window function
 - Overlapping signals 
 */
@@ -38,11 +37,11 @@ typedef struct {
 
 double DoubleArray_get(DoubleArray array, size_t index);
 
-void fd_create(FreqDomain* fd, Wave* wave);
-void fd_destroy(FreqDomain* fd);
-void fd_set_frequency(FreqDomain* fd);
-void fd_set_magnitude(FreqDomain* fd, Wave* wave);
-void fd_write_buffer_to_file(FreqDomain* fd, size_t sample_index);
+void FreqDomain_create(FreqDomain* fd, Wave* wave);
+void FreqDomain_destroy(FreqDomain* fd);
+void FreqDomain_set_frequency(FreqDomain* fd);
+void FreqDomain_set_magnitude(FreqDomain* fd, Wave* wave);
+void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t sample_index);
 void fft(short in[], double complex out[], size_t n);
 void _fft(short in[], double complex out[], size_t n, size_t stride);
 
@@ -53,20 +52,20 @@ int main(void) {
 
     WaveFormat(&wave_copy, SAMPLE_RATE, 16, 1);
 
-    fd_create(&fd, &wave_copy);
+    FreqDomain_create(&fd, &wave_copy);
 
-    fd_set_magnitude(&fd, &wave_copy);
-    fd_set_frequency(&fd);
-    fd_write_buffer_to_file(&fd, fd.sample_size / 2);
+    FreqDomain_set_magnitude(&fd, &wave_copy);
+    FreqDomain_set_frequency(&fd);
+    FreqDomain_write_buffer_to_file(&fd, fd.sample_size / 2);
 
-    fd_destroy(&fd);
+    FreqDomain_destroy(&fd);
 
     UnloadWave(wave_copy);
     UnloadWave(wave_original);
 }
 
 
-void fd_create(FreqDomain* fd, Wave* wave) {
+void FreqDomain_create(FreqDomain* fd, Wave* wave) {
     fd->sample_size = 0;
     fd->magnitude.length = 0;
     fd->magnitude.capacity = wave->frameCount + HALF_FRAME_SIZE;
@@ -75,21 +74,21 @@ void fd_create(FreqDomain* fd, Wave* wave) {
     fd->frequency.items = malloc(fd->frequency.capacity * sizeof(fd->frequency.items));
 }
 
-void fd_destroy(FreqDomain* fd) {
+void FreqDomain_destroy(FreqDomain* fd) {
     free(fd->magnitude.items);
     fd->magnitude.items = NULL;
     free(fd->frequency.items);
     fd->frequency.items = NULL;
 }
 
-void fd_set_frequency(FreqDomain* fd) {
+void FreqDomain_set_frequency(FreqDomain* fd) {
     for(size_t i = 0; i < HALF_FRAME_SIZE; ++i) {
         fd->frequency.items[i] = i * ((double)SAMPLE_RATE / FRAME_SIZE);
         fd->frequency.length++;
     }
 }
 
-void fd_set_magnitude(FreqDomain* fd, Wave* wave) {
+void FreqDomain_set_magnitude(FreqDomain* fd, Wave* wave) {
     short PCM_buffer[FRAME_SIZE];
     double complex fft_output[FRAME_SIZE];
     size_t wave_iterator = 0;
@@ -123,7 +122,7 @@ void fd_set_magnitude(FreqDomain* fd, Wave* wave) {
     fd += 0;
 }
 
-void fd_write_buffer_to_file(FreqDomain* fd, size_t sample_index) {
+void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t sample_index) {
     FILE *file;
     
     file = fopen("debug/sample.txt", "w");

@@ -89,7 +89,7 @@ void FreqDomain_frequency_set(FreqDomain* fd) {
     }
 }
 
-void FreqDomain_set_magnitude(FreqDomain* fd, Wave* wave) {
+void FreqDomain_magnitude_set(FreqDomain* fd, Wave* wave) {
     short PCM_buffer[FRAME_SIZE];
     double complex fft_output[FRAME_SIZE];
     size_t wave_iterator = 0;

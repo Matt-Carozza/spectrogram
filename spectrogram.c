@@ -39,8 +39,8 @@ double DoubleArray_get(DoubleArray array, size_t index);
 
 void FreqDomain_create(FreqDomain* fd, Wave* wave);
 void FreqDomain_destroy(FreqDomain* fd);
-void FreqDomain_set_frequency(FreqDomain* fd);
-void FreqDomain_set_magnitude(FreqDomain* fd, Wave* wave);
+void FreqDomain_frequency_set(FreqDomain* fd);
+void FreqDomain_magnitude_set(FreqDomain* fd, Wave* wave);
 void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t sample_index);
 void fft(short in[], double complex out[], size_t n);
 void _fft(short in[], double complex out[], size_t n, size_t stride);
@@ -54,8 +54,8 @@ int main(void) {
 
     FreqDomain_create(&fd, &wave_copy);
 
-    FreqDomain_set_magnitude(&fd, &wave_copy);
-    FreqDomain_set_frequency(&fd);
+    FreqDomain_magnitude_set(&fd, &wave_copy);
+    FreqDomain_frequency_set(&fd);
     FreqDomain_write_buffer_to_file(&fd, fd.sample_size / 2);
 
     FreqDomain_destroy(&fd);
@@ -81,7 +81,7 @@ void FreqDomain_destroy(FreqDomain* fd) {
     fd->frequency.items = NULL;
 }
 
-void FreqDomain_set_frequency(FreqDomain* fd) {
+void FreqDomain_frequency_set(FreqDomain* fd) {
     for(size_t i = 0; i < HALF_FRAME_SIZE; ++i) {
         fd->frequency.items[i] = i * ((double)SAMPLE_RATE / FRAME_SIZE);
         fd->frequency.length++;

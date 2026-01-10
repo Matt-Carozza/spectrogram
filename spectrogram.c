@@ -146,7 +146,7 @@ void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t sample_index) {
 
 void fft(short in[], double complex out[], size_t n) {
     assert(n % 2 == 0);
-    _fft(in, out, FRAME_SIZE, 1);
+    _fft(in, out, n, 1);
 }
 
 void _fft(short in[], double complex out[], size_t n, size_t stride) {

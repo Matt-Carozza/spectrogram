@@ -19,7 +19,8 @@ TODO:
 #define FRAME_SIZE 4096
 #define HALF_FRAME_SIZE (FRAME_SIZE / 2)
 #define HOP_LENGTH 441
-#define PI 3.14159265358979323846f
+#define PI 3.14159265358979323846f // Might be redefinition from Raylib
+#define PCM16_MAX 32767.0
 
 typedef struct {
     double* items; 
@@ -44,8 +45,8 @@ void FreqDomain_destroy(FreqDomain* fd);
 void FreqDomain_frequency_set(FreqDomain* fd);
 void FreqDomain_magnitude_set(FreqDomain* fd, Wave* wave);
 void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t sample_index);
-void fft(short in[], double complex out[], size_t n);
-void _fft(short in[], double complex out[], size_t n, size_t stride);
+void fft(double in[], double complex out[], size_t n);
+void _fft(double in[], double complex out[], size_t n, size_t stride);
 
 int main(void) {
     Wave wave_original = LoadWave("songs/Methods.mp3");
@@ -91,6 +92,7 @@ void FreqDomain_frequency_set(FreqDomain* fd) {
 
 void FreqDomain_magnitude_set(FreqDomain* fd, Wave* wave) {
     short PCM_buffer[FRAME_SIZE];
+    double PCM_buffer_normalized[FRAME_SIZE];
     double complex fft_output[FRAME_SIZE];
     size_t wave_iterator = 0;
     short* wave_data_ptr = wave->data;
@@ -98,8 +100,9 @@ void FreqDomain_magnitude_set(FreqDomain* fd, Wave* wave) {
     for(wave_iterator = 0; wave_iterator < wave->frameCount - FRAME_SIZE;) {
         for(size_t j = 0; j < FRAME_SIZE; ++j) {
             PCM_buffer[j] = wave_data_ptr[wave_iterator++];
+            PCM_buffer_normalized[j] = PCM_buffer[j] / PCM16_MAX;
         }
-        fft(PCM_buffer, fft_output, FRAME_SIZE);
+        fft(PCM_buffer_normalized, fft_output, FRAME_SIZE);
         for(size_t j = HALF_FRAME_SIZE - 1; j < FRAME_SIZE; ++j) {
             DoubleArray_push(&fd->magnitude, cabs(fft_output[j]));
         }
@@ -110,12 +113,13 @@ void FreqDomain_magnitude_set(FreqDomain* fd, Wave* wave) {
     for(size_t i = 0; i < FRAME_SIZE; ++i) {
         if (i < wave->frameCount % FRAME_SIZE) {
             PCM_buffer[i] = wave_data_ptr[wave_iterator++];
+            PCM_buffer_normalized[i] = PCM_buffer[i] / PCM16_MAX;
         } 
         else  {
             PCM_buffer[i] = 0;
         }
     }
-    fft(PCM_buffer, fft_output, FRAME_SIZE);
+    fft(PCM_buffer_normalized, fft_output, FRAME_SIZE);
     for(size_t i = HALF_FRAME_SIZE - 1; i < FRAME_SIZE; ++i) {
         DoubleArray_push(&fd->magnitude, cabs(fft_output[i]));
     }
@@ -145,12 +149,12 @@ void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t sample_index) {
     return;
 }
 
-void fft(short in[], double complex out[], size_t n) {
+void fft(double in[], double complex out[], size_t n) {
     assert(n % 2 == 0);
     _fft(in, out, n, 1);
 }
 
-void _fft(short in[], double complex out[], size_t n, size_t stride) {
+void _fft(double in[], double complex out[], size_t n, size_t stride) {
     assert(n > 0);
 
     if (n == 1) { 

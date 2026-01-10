@@ -6,7 +6,7 @@ set -xe
 
 if [ "$1" = "all" ]; then
     CC=gcc
-    CFLAGS="-g -O0 -Wall -Wextra -fdebug-prefix-map=$(pwd)=. `pkg-config --cflags raylib`"
+    CFLAGS="-g -O0 -Wall -fsanitize=address -Wextra -fdebug-prefix-map=$(pwd)=. `pkg-config --cflags raylib`"
     LIBS="`pkg-config --libs raylib` -lglfw -ldl -lpthread -lm"
     OUT=spectrogram
     $CC $CFLAGS spectrogram.c -o $OUT $LIBS
@@ -18,7 +18,7 @@ if [ "$1" = "all" ]; then
 else
     if [ "$1" = "linux" ]; then
         CC=gcc
-        CFLAGS="-g -O0 -Wall -Wextra -fdebug-prefix-map=$(pwd)=. `pkg-config --cflags raylib`"
+        CFLAGS="-g -O0 -Wall -fsanitize=address -Wextra -fdebug-prefix-map=$(pwd)=. `pkg-config --cflags raylib`"
         LIBS="`pkg-config --libs raylib` -lglfw -ldl -lpthread -lm"
         OUT=spectrogram
     else

@@ -10,8 +10,6 @@
 
 /*
 TODO:
-- Normalize Data
-- Apply window function
 - Overlapping signals 
 */
 
@@ -93,16 +91,25 @@ void FreqDomain_frequency_set(FreqDomain* fd) {
 void FreqDomain_magnitude_set(FreqDomain* fd, Wave* wave) {
     short PCM_buffer[FRAME_SIZE];
     double PCM_buffer_normalized[FRAME_SIZE];
+    double PCM_buffer_normalized_windowed[FRAME_SIZE];
     double complex fft_output[FRAME_SIZE];
+    double hamming_window[FRAME_SIZE];
     size_t wave_iterator = 0;
     short* wave_data_ptr = wave->data;
     
+    // Create hamming window data (https://www.sciencedirect.com/topics/engineering/hamming-window)
+    for(size_t i = 0; i < FRAME_SIZE; i++) {
+        hamming_window[i] = 0.54 - 0.46 * cos((2 * PI * i) / (FRAME_SIZE - 1));
+    }
+    
+    // Grab buffer data from song file
     for(wave_iterator = 0; wave_iterator < wave->frameCount - FRAME_SIZE;) {
         for(size_t j = 0; j < FRAME_SIZE; ++j) {
             PCM_buffer[j] = wave_data_ptr[wave_iterator++];
             PCM_buffer_normalized[j] = PCM_buffer[j] / PCM16_MAX;
+            PCM_buffer_normalized_windowed[j] = PCM_buffer_normalized[j] * hamming_window[j];
         }
-        fft(PCM_buffer_normalized, fft_output, FRAME_SIZE);
+        fft(PCM_buffer_normalized_windowed, fft_output, FRAME_SIZE);
         for(size_t j = HALF_FRAME_SIZE - 1; j < FRAME_SIZE; ++j) {
             DoubleArray_push(&fd->magnitude, cabs(fft_output[j]));
         }
@@ -114,12 +121,13 @@ void FreqDomain_magnitude_set(FreqDomain* fd, Wave* wave) {
         if (i < wave->frameCount % FRAME_SIZE) {
             PCM_buffer[i] = wave_data_ptr[wave_iterator++];
             PCM_buffer_normalized[i] = PCM_buffer[i] / PCM16_MAX;
+            PCM_buffer_normalized_windowed[i] = PCM_buffer_normalized[i] * hamming_window[i];
         } 
         else  {
             PCM_buffer[i] = 0;
         }
     }
-    fft(PCM_buffer_normalized, fft_output, FRAME_SIZE);
+    fft(PCM_buffer_normalized_windowed, fft_output, FRAME_SIZE);
     for(size_t i = HALF_FRAME_SIZE - 1; i < FRAME_SIZE; ++i) {
         DoubleArray_push(&fd->magnitude, cabs(fft_output[i]));
     }

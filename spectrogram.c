@@ -15,10 +15,6 @@
 
 /*
 TODO:
-- Move to a data-oriented, procedural style
-    - Memory arenas
-        - Move to other file
-    - Create header files
 - Overlapping signals 
 */
 
@@ -60,8 +56,6 @@ int main(void) {
     compute_frequency_spectrum(fd);
     FreqDomain_write_buffer_to_file(fd, fd->sample_size / 2);
 
-    // FreqDomain_destroy(perm_arena, fd);
-    
     arena_destroy(perm_arena);
 
     UnloadWave(wave_copy);
@@ -79,13 +73,6 @@ FreqDomain* FreqDomain_create(Arena* arena, Wave* wave) {
     fd->frequency.items = arena_push(arena, fd->frequency.capacity * sizeof(*fd->frequency.items), true);
     
     return fd;
-}
-
-void FreqDomain_destroy(Arena* arena, FreqDomain* fd) {
-    free(fd->magnitude.items);
-    fd->magnitude.items = NULL;
-    free(fd->frequency.items);
-    fd->frequency.items = NULL;
 }
 
 void compute_frequency_spectrum(FreqDomain* fd) {

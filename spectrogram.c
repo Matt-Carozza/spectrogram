@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <math.h>
 #include <raylib.h>
 #include <complex.h>
@@ -7,9 +8,17 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <string.h>
+
+#include "arena.c"
+#include "double_array.c"
 
 /*
 TODO:
+- Move to a data-oriented, procedural style
+    - Memory arenas
+        - Move to other file
+    - Create header files
 - Overlapping signals 
 */
 
@@ -21,13 +30,6 @@ TODO:
 #define PCM16_MAX 32767.0
 
 typedef struct {
-    double* items; 
-    size_t length;
-    size_t capacity;
-} DoubleArray;
-
-
-typedef struct {
     size_t sample_size;
     DoubleArray magnitude;
     DoubleArray frequency;
@@ -35,60 +37,64 @@ typedef struct {
 
 // MEL DATA STRUCT
 
-double DoubleArray_get(DoubleArray array, size_t index);
-void DoubleArray_push(DoubleArray* array, double value);
 
-void FreqDomain_create(FreqDomain* fd, Wave* wave);
-void FreqDomain_destroy(FreqDomain* fd);
-void FreqDomain_frequency_set(FreqDomain* fd);
-void FreqDomain_magnitude_set(FreqDomain* fd, Wave* wave);
+FreqDomain* FreqDomain_create(Arena* arena, Wave* wave);
+void FreqDomain_destroy(Arena* arena, FreqDomain* fd);
+void compute_frequency_spectrum(FreqDomain* fd);
+void compute_magnitude_spectrum(FreqDomain* fd, Wave* wave);
 void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t sample_index);
 void fft(double in[], double complex out[], size_t n);
 void _fft(double in[], double complex out[], size_t n, size_t stride);
 
 int main(void) {
+    Arena* perm_arena = arena_create(MiB(100));
     Wave wave_original = LoadWave("songs/Methods.mp3");
     Wave wave_copy = WaveCopy(wave_original);
-    FreqDomain fd;
+    FreqDomain* fd; 
 
     WaveFormat(&wave_copy, SAMPLE_RATE, 16, 1);
 
-    FreqDomain_create(&fd, &wave_copy);
+    fd = FreqDomain_create(perm_arena, &wave_copy);
 
-    FreqDomain_magnitude_set(&fd, &wave_copy);
-    FreqDomain_frequency_set(&fd);
-    FreqDomain_write_buffer_to_file(&fd, fd.sample_size / 2);
+    compute_magnitude_spectrum(fd, &wave_copy);
+    compute_frequency_spectrum(fd);
+    FreqDomain_write_buffer_to_file(fd, fd->sample_size / 2);
 
-    FreqDomain_destroy(&fd);
+    // FreqDomain_destroy(perm_arena, fd);
+    
+    arena_destroy(perm_arena);
 
     UnloadWave(wave_copy);
     UnloadWave(wave_original);
 }
 
-
-void FreqDomain_create(FreqDomain* fd, Wave* wave) {
+FreqDomain* FreqDomain_create(Arena* arena, Wave* wave) {
+    FreqDomain *fd = arena_push(arena, sizeof(FreqDomain), true);
     fd->sample_size = 0;
     fd->magnitude.length = 0;
     fd->magnitude.capacity = wave->frameCount + HALF_FRAME_SIZE;
-    fd->magnitude.items = malloc(fd->magnitude.capacity * sizeof(*fd->magnitude.items));
+    fd->magnitude.items = arena_push(arena, fd->magnitude.capacity * sizeof(*fd->magnitude.items), true);
+    fd->frequency.length = 0;
     fd->frequency.capacity = HALF_FRAME_SIZE;
-    fd->frequency.items = malloc(fd->frequency.capacity * sizeof(*fd->frequency.items));
+    fd->frequency.items = arena_push(arena, fd->frequency.capacity * sizeof(*fd->frequency.items), true);
+    
+    return fd;
 }
 
-void FreqDomain_destroy(FreqDomain* fd) {
+void FreqDomain_destroy(Arena* arena, FreqDomain* fd) {
     free(fd->magnitude.items);
     fd->magnitude.items = NULL;
     free(fd->frequency.items);
     fd->frequency.items = NULL;
 }
 
-void FreqDomain_frequency_set(FreqDomain* fd) {
+void compute_frequency_spectrum(FreqDomain* fd) {
     for(size_t i = 0; i < HALF_FRAME_SIZE; ++i) {
-        DoubleArray_push(&fd->frequency, i * ((double)SAMPLE_RATE / FRAME_SIZE));
+        DoubleArray_push(&fd->frequency, i * ((double)SAMPLE_RATE / FRAME_SIZE)); // FIX These up with pointers
     }
 }
 
-void FreqDomain_magnitude_set(FreqDomain* fd, Wave* wave) {
+void compute_magnitude_spectrum(FreqDomain* fd, Wave* wave) {
     short PCM_buffer[FRAME_SIZE];
     double PCM_buffer_normalized[FRAME_SIZE];
     double PCM_buffer_normalized_windowed[FRAME_SIZE];
@@ -179,19 +185,4 @@ void _fft(double in[], double complex out[], size_t n, size_t stride) {
         out[i] = e + v; 
         out[i + (n/2)] = e - v; 
     } 
-}
-
-double DoubleArray_get(DoubleArray array, size_t index) {
-    if (index < array.length) {
-        return array.items[index];
-    }
-    return 0;
-}
-
-void DoubleArray_push(DoubleArray* array, double value) {
-    if (array->length < array->capacity) {
-        array->items[array->length++] = value;
-        return;
-    }
-    return;
 }

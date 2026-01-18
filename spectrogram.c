@@ -35,7 +35,6 @@ typedef struct {
 
 
 FreqDomain* FreqDomain_create(Arena* arena, Wave* wave);
-void FreqDomain_destroy(Arena* arena, FreqDomain* fd);
 void compute_frequency_spectrum(FreqDomain* fd);
 void compute_magnitude_spectrum(FreqDomain* fd, Wave* wave);
 void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t sample_index);

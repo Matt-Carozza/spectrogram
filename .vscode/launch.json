@@ -106,7 +106,7 @@
             "name": "Debug (external build)",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/src/spectrogram/spectrogram",
+            "program": "${workspaceFolder}/src/processing/spectrogram",
             "cwd": "${workspaceFolder}",
             "MIMode": "gdb"
         }

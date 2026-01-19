@@ -38,6 +38,7 @@ typedef struct {
 FreqDomain* FreqDomain_create(Arena* arena, Wave* wave);
 void compute_frequency_spectrum(FreqDomain* fd);
 void compute_magnitude_spectrum(FreqDomain* fd, Wave* wave);
+void write_spectrogram_to_csv(FreqDomain* fd);
 void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t bin_index);
 void fft(double in[], double complex out[], size_t n);
 void _fft(double in[], double complex out[], size_t n, size_t stride);
@@ -54,7 +55,8 @@ int main(void) {
     
     compute_magnitude_spectrum(fd, &wave_copy);
     compute_frequency_spectrum(fd);
-    FreqDomain_write_buffer_to_file(fd, fd->time_slice_index / 2);
+    write_spectrogram_to_csv(fd);
+    // FreqDomain_write_buffer_to_file(fd, fd->time_slice_index / 2);
 
     arena_destroy(perm_arena);
 
@@ -110,7 +112,36 @@ void compute_magnitude_spectrum(FreqDomain* fd, Wave* wave) {
     }
 }
 
-// void compute_frame_magnitude
+void write_spectrogram_to_csv(FreqDomain* fd) {
+    FILE *file;
+
+    file = fopen("export/song.csv", "w");
+    
+    if (file ==  NULL) {
+       perror("Error Opening File");
+       return;
+    }
+
+    // Write header
+    fprintf(file, "time_index");
+    for (size_t i = 0; i < BIN_WIDTH; ++i) {
+        fprintf(file, ",freq%zu", i);        
+    }
+    fprintf(file, "\n");
+
+    // Write data
+    for (size_t i = 0; i < fd->time_slice_index; ++i) {
+        fprintf(file, "%zu", i);
+        for (size_t j = 0; j < BIN_WIDTH; ++j) {
+            fprintf(file, ",%lf", fd->magnitude.items[i * BIN_WIDTH + j]);
+        } 
+        fprintf(file, "\n");
+    }
+
+    fclose(file);
+    return;
+}
+
 
 void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t bin_index) {
     FILE *file;

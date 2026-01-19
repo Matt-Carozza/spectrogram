@@ -19,17 +19,18 @@ TODO:
 */
 
 #define SAMPLE_RATE 44100 
-#define FRAME_SIZE 4096
-#define HALF_FRAME_SIZE (FRAME_SIZE / 2)
-#define HOP_LENGTH 441
+#define WINDOW_SIZE 4096
+#define BIN_WIDTH WINDOW_SIZE / 2 
+#define HOP_SIZE 2048
 #define PI 3.14159265358979323846f // Might be redefinition from Raylib
-#define PCM16_MAX 32767.0
+#define PCM16_MAX 32768.0
 
 typedef struct {
-    size_t sample_size;
+    size_t time_slice_index;
     DoubleArray magnitude;
     DoubleArray frequency;
 } FreqDomain;
+
 
 // MEL DATA STRUCT
 
@@ -37,7 +38,7 @@ typedef struct {
 FreqDomain* FreqDomain_create(Arena* arena, Wave* wave);
 void compute_frequency_spectrum(FreqDomain* fd);
 void compute_magnitude_spectrum(FreqDomain* fd, Wave* wave);
-void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t sample_index);
+void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t bin_index);
 void fft(double in[], double complex out[], size_t n);
 void _fft(double in[], double complex out[], size_t n, size_t stride);
 
@@ -50,10 +51,10 @@ int main(void) {
     WaveFormat(&wave_copy, SAMPLE_RATE, 16, 1);
 
     fd = FreqDomain_create(perm_arena, &wave_copy);
-
+    
     compute_magnitude_spectrum(fd, &wave_copy);
     compute_frequency_spectrum(fd);
-    FreqDomain_write_buffer_to_file(fd, fd->sample_size / 2);
+    FreqDomain_write_buffer_to_file(fd, fd->time_slice_index / 2);
 
     arena_destroy(perm_arena);
 
@@ -63,71 +64,55 @@ int main(void) {
 
 FreqDomain* FreqDomain_create(Arena* arena, Wave* wave) {
     FreqDomain *fd = arena_push(arena, sizeof(FreqDomain), true);
-    fd->sample_size = 0;
+    fd->time_slice_index = 0;
     fd->magnitude.length = 0;
-    fd->magnitude.capacity = wave->frameCount + HALF_FRAME_SIZE;
+    fd->magnitude.capacity = wave->frameCount + BIN_WIDTH; 
     fd->magnitude.items = arena_push(arena, fd->magnitude.capacity * sizeof(*fd->magnitude.items), true);
     fd->frequency.length = 0;
-    fd->frequency.capacity = HALF_FRAME_SIZE;
+    fd->frequency.capacity = BIN_WIDTH;
     fd->frequency.items = arena_push(arena, fd->frequency.capacity * sizeof(*fd->frequency.items), true);
     
     return fd;
 }
 
 void compute_frequency_spectrum(FreqDomain* fd) {
-    for(size_t i = 0; i < HALF_FRAME_SIZE; ++i) {
-        DoubleArray_push(&fd->frequency, i * ((double)SAMPLE_RATE / FRAME_SIZE)); // FIX These up with pointers
+    for(size_t i = 0; i < BIN_WIDTH; ++i) {
+        DoubleArray_push(&fd->frequency, i * ((double)SAMPLE_RATE / WINDOW_SIZE)); 
     }
 }
 
 void compute_magnitude_spectrum(FreqDomain* fd, Wave* wave) {
-    short PCM_buffer[FRAME_SIZE];
-    double PCM_buffer_normalized[FRAME_SIZE];
-    double PCM_buffer_normalized_windowed[FRAME_SIZE];
-    double complex fft_output[FRAME_SIZE];
-    double hamming_window[FRAME_SIZE];
+    double PCM_buffer_windowed[WINDOW_SIZE];
+    double complex fft_output[WINDOW_SIZE];
+    double complex fft_output_normalized[WINDOW_SIZE];
+    double hamming_window[WINDOW_SIZE];
     size_t wave_iterator = 0;
     short* wave_data_ptr = wave->data;
     
     // Create hamming window data (https://www.sciencedirect.com/topics/engineering/hamming-window)
-    for(size_t i = 0; i < FRAME_SIZE; i++) {
-        hamming_window[i] = 0.54 - 0.46 * cos((2 * PI * i) / (FRAME_SIZE - 1));
+    for(size_t i = 0; i < WINDOW_SIZE; i++) {
+        hamming_window[i] = 0.54 - 0.46 * cos((2 * PI * i) / (WINDOW_SIZE - 1));
     }
     
     // Grab buffer data from song file
-    for(wave_iterator = 0; wave_iterator < wave->frameCount - FRAME_SIZE;) {
-        for(size_t j = 0; j < FRAME_SIZE; ++j) {
-            PCM_buffer[j] = wave_data_ptr[wave_iterator++];
-            PCM_buffer_normalized[j] = PCM_buffer[j] / PCM16_MAX;
-            PCM_buffer_normalized_windowed[j] = PCM_buffer_normalized[j] * hamming_window[j];
+    for(wave_iterator = 0; wave_iterator < wave->frameCount - WINDOW_SIZE; wave_iterator+=HOP_SIZE) {
+        for(size_t i = 0; i < WINDOW_SIZE; ++i) {
+            double t = wave_data_ptr[wave_iterator + i] / PCM16_MAX; // Normalize data before storing
+            PCM_buffer_windowed[i] = t * hamming_window[i];
         }
-        fft(PCM_buffer_normalized_windowed, fft_output, FRAME_SIZE);
-        for(size_t j = HALF_FRAME_SIZE - 1; j < FRAME_SIZE; ++j) {
-            DoubleArray_push(&fd->magnitude, cabs(fft_output[j]));
+        fft(PCM_buffer_windowed, fft_output, WINDOW_SIZE);
+        // Normalize Window Output
+        for(size_t i = 0; i < BIN_WIDTH; ++i) {
+            fft_output_normalized[i] = fft_output[i] / sqrt(WINDOW_SIZE);
+            DoubleArray_push(&fd->magnitude, cabs(fft_output_normalized[i]));
         }
-        fd->sample_size++;
+        fd->time_slice_index++;
     }
-    
-    // Final buffer will exceed frame count size, so zeros must be put into after
-    for(size_t i = 0; i < FRAME_SIZE; ++i) {
-        if (i < wave->frameCount % FRAME_SIZE) {
-            PCM_buffer[i] = wave_data_ptr[wave_iterator++];
-            PCM_buffer_normalized[i] = PCM_buffer[i] / PCM16_MAX;
-            PCM_buffer_normalized_windowed[i] = PCM_buffer_normalized[i] * hamming_window[i];
-        } 
-        else  {
-            PCM_buffer[i] = 0;
-        }
-    }
-    fft(PCM_buffer_normalized_windowed, fft_output, FRAME_SIZE);
-    for(size_t i = HALF_FRAME_SIZE - 1; i < FRAME_SIZE; ++i) {
-        DoubleArray_push(&fd->magnitude, cabs(fft_output[i]));
-    }
-    fd->sample_size++; // Increase sample by one for final buffer
-    fd += 0;
 }
 
-void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t sample_index) {
+// void compute_frame_magnitude
+
+void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t bin_index) {
     FILE *file;
     
     file = fopen("debug/sample.txt", "w");
@@ -137,14 +122,10 @@ void FreqDomain_write_buffer_to_file(FreqDomain* fd, size_t sample_index) {
        return;
     }
     
-    for (size_t i = 0; i < HALF_FRAME_SIZE; ++i) {
-        fprintf(file, "%zu: (%lfHz, %lf)\n", i, DoubleArray_get(fd->frequency, i), DoubleArray_get(fd->magnitude, (sample_index * HALF_FRAME_SIZE) + i));
+    for (size_t i = 0; i < BIN_WIDTH; ++i) {
+        fprintf(file, "%zu: (%lfHz, %lf)\n", i, DoubleArray_get(fd->frequency, i), DoubleArray_get(fd->magnitude, (bin_index * BIN_WIDTH) + i));
     }
 
-    // for (size_t i = 0; i < HALF_FRAME_SIZE; ++i) {
-    //     fprintf(file, "(%zu, %lfHz): (%lf, %lf)\n", i, fd->frequency[HALF_FRAME_SIZE - i - 1], fd->magnitude[(HALF_FRAME_SIZE * sample_index) + i], fd->magnitude[(HALF_FRAME_SIZE * (sample_index + 1)) - i]);
-    // }
-    
     fclose(file);
     return;
 }
